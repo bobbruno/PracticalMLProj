@@ -34,10 +34,95 @@ In order to make the code as reproducible as possible, the following definitions
 * All data files will reside in a "./data" subdirectory. This includes the training and test data provided;
 * All operations using random numbers will be preceded by a `set.seed(12345)` command;
 * The following packages and versions were used during this analysis:
-    + 
-## Loading and Preparing the data
+    + `caret` version 6.0-37
+    + `data.table` version1.9.5
+    + `doParallel` version 1.0.8
+    + `ggplot2` version 1.0.0
+    + `kernlab` version 0.9-19
+    + `lattice` version 0.20-29
+    + `nnet` version 7.3-8
+    + `randomForest` version 4.6-10
+    + `rpart` version 4.1-8
+    + `rpart-plot` version 1.5.1
+
+* The analysis was performed in a Linux Kubuntu 14.04 environment, using RStudio 0.98.
+
+## Loading, preparing and looking at the data
+
+The following commands will load the data files and get rid of irrelevant columns:
+* Timestamp, user and timestamps are irrelevant for prediction
+* Variables with near zero variance are irrelevant
+* Variables with a high rate of NA's will be eliminated. Analysing the data, a 
+cutoff of any NA is the same as over 90% rows NA for any column
+
+```{r}
+library(data.table)
+library(caret)
+trainSrc = fread("data/pml-training.csv",na.strings=c("NA","#DIV/0!",""))
+trainDS = copy(trainSrc)
+trainDS[, `:=`(V1=NULL, user_name=NULL, raw_timestamp_part_1=NULL,
+                raw_timestamp_part_2=NULL, cvtd_timestamp=NULL,
+                new_window=NULL, num_window=NULL)]
+nzv = nearZeroVar(trainDS)
+trainDS <- trainDS[,-nzv, with=FALSE]
+relevantCols = attr(colSums(is.na(trainDS)), "names")[colSums(is.na(trainDS)) == 0]
+trainDS <- trainDS[, relevantCols, with=FALSE]
+
+
+testSrc = fread("data/pml-testing.csv",na.strings=c("NA","#DIV/0!",""))
+testDS = copy(testSrc)
+testDS[, `:=`(V1=NULL, user_name=NULL, raw_timestamp_part_1=NULL,
+                raw_timestamp_part_2=NULL, cvtd_timestamp=NULL,
+                new_window=NULL, num_window=NULL)]
+testDS <- testDS[,-nzv, with=FALSE]
+testDS <- testDS[, relevantCols[1:52], with=FALSE]
+#unique(lapply(lapply(colnames(trainSrc), function(x) trainSrc[,.N, by=x]),
+#              function(x) { if (dim(x)[1]<300) x }))
+```
+
+It's interesting to check the correlation of the remaining variables. The following analysis identifies highly correlated variables:
+
+```{r}
+#library(corrplot)
+M = cor(trainDS[,-53,with=FALSE])
+#corrplot.mixed(M, lower="ellipse", upper="number", #title="Correlation Matrix",
+#         order="FPC", tl.pos="lt", diag="l")
+corElim = findCorrelation(M, cutoff=0.9)
+```
+
+After all these operations, we are left with the following relevant variables:
+```{r echo=FALSE}
+knitr::kable(matrix(c(names(trainDS)[-corElim], c("", "")), ncol=3), col.names = rep("Variables", 3))
+trainDS = trainDS[,-corElim,with=FALSE]
+testDS = testDS[,-corElim,with=FALSE]
+```
 
 ## Training and Cross-Validating the Model
+
+We'll use a 10-fold cross-validation to train several different models:
+* A Gaussian (radial) SVM;
+* A Neural net;
+* A Random forest;
+* A CART tree.
+
+```{r}
+trainCtrl = trainControl(method="cv", number=10, 
+                         preProcOptions=c("center", "scale"))
+
+library(doParallel)
+cl <- makeCluster(detectCores()-2)
+registerDoParallel(cl)
+
+set.seed(12345)
+tree = train(classe ~ ., data=trainDS, method = "rpart", trControl = trainCtrl)
+set.seed(12345)
+forest = train(classe ~ ., data=trainDS, method = "rf", trControl = trainCtrl)
+set.seed(12345)
+svm = train(classe ~ ., data=trainDS, method = "svmRadial", trControl = trainCtrl)
+set.seed(12345)
+neural = train(classe ~ ., data=trainDS, method = "nnet", trControl = trainCtrl, size=45)
+stopCluster(cl)
+```
 
 ## Model Analysis
 
