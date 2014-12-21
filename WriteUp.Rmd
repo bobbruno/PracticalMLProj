@@ -5,15 +5,17 @@ date: "20-12-2014"
 output: html_document
 ---
 
-This is an introduction, explaining the assignment, course, github repo URL, credits, etc.
-
 ## Background Information
 
 This section is a copy of the exercise text, provided for reference.
 
 ### Background
 
-Using devices such as *Jawbone Up*, *Nike FuelBand*, and *Fitbit* it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the [PUC-RIO Human Activity Report](http://groupware.les.inf.puc-rio.br/har) website (see the section on the Weight Lifting Exercise Dataset). 
+Using devices such as *Jawbone Up*, *Nike FuelBand*, and *Fitbit* it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. 
+
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. 
+
+More information is available from the [PUC-RIO Human Activity Report](http://groupware.les.inf.puc-rio.br/har) website (see the section on the Weight Lifting Exercise Dataset). 
 
 ### Data
 
@@ -38,26 +40,29 @@ In order to make the code as reproducible as possible, the following definitions
     + `data.table` version1.9.5
     + `doParallel` version 1.0.8
     + `ggplot2` version 1.0.0
-    + `kernlab` version 0.9-19
     + `lattice` version 0.20-29
     + `nnet` version 7.3-8
     + `randomForest` version 4.6-10
     + `rpart` version 4.1-8
-    + `rpart-plot` version 1.5.1
+
+```{r libraries}
+library(caret)
+library(data.table)
+library(doParallel)
+```
 
 * The analysis was performed in a Linux Kubuntu 14.04 environment, using RStudio 0.98.
 
 ## Loading, preparing and looking at the data
 
 The following commands will load the data files and get rid of irrelevant columns:
+
 * Timestamp, user and timestamps are irrelevant for prediction
 * Variables with near zero variance are irrelevant
 * Variables with a high rate of NA's will be eliminated. Analysing the data, a 
-cutoff of any NA is the same as over 90% rows NA for any column
+cutoff of any NA is the same as over 90% rows NA for any column.
 
-```{r loader}
-library(data.table)
-library(caret)
+```{r loader, cache=TRUE}
 trainSrc = fread("data/pml-training.csv",na.strings=c("NA","#DIV/0!",""))
 trainDS = copy(trainSrc)
 trainDS[, `:=`(V1=NULL, user_name=NULL, raw_timestamp_part_1=NULL,
@@ -83,14 +88,11 @@ testDS <- testDS[, relevantCols[1:52], with=FALSE]
 It's interesting to check the correlation of the remaining variables. The following analysis identifies highly correlated variables:
 
 ```{r correl}
-#library(corrplot)
 M = cor(trainDS[,-53,with=FALSE])
-#corrplot.mixed(M, lower="ellipse", upper="number", #title="Correlation Matrix",
-#         order="FPC", tl.pos="lt", diag="l")
 corElim = findCorrelation(M, cutoff=0.9)
 ```
 
-After all these operations, we are left with the following relevant variables:
+After these operations, we are left with the following relevant variables:
 ```{r vartable, echo=FALSE}
 knitr::kable(matrix(c(names(trainDS)[-corElim], c("", "")), ncol=3), col.names = rep("Variables", 3))
 trainDS = trainDS[,-corElim,with=FALSE]
@@ -101,6 +103,7 @@ trainDS[,classe:=as.factor(classe)]
 ## Training and Cross-Validating the Model
 
 We'll use a 10-fold cross-validation to train several different models:
+
 * A Neural net;
 * A Random forest;
 * A CART tree.
@@ -110,8 +113,6 @@ Given the time it takes to train these models, the code will try to recover them
 ```{r trainer}
 trainCtrl = trainControl(method="cv", number=5, 
                          preProcOptions=c("center", "scale"))
-
-library(doParallel)
 cl <- makeCluster(detectCores()-1)
 registerDoParallel(cl)
 
@@ -133,6 +134,7 @@ if (class(neural)[1] == "try-error") {
     neural = train(classe ~ ., data=trainDS, method = "nnet",
                    trControl = trainCtrl)
 }
+
 stopCluster(cl)
 ```
 

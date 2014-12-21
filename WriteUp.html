@@ -58,13 +58,14 @@ if (window.hljs && document.readyState && document.readyState === "complete") {
 </div>
 
 
-<p>This is an introduction, explaining the assignment, course, github repo URL, credits, etc.</p>
 <div id="background-information" class="section level2">
 <h2>Background Information</h2>
 <p>This section is a copy of the exercise text, provided for reference.</p>
 <div id="background" class="section level3">
 <h3>Background</h3>
-<p>Using devices such as <em>Jawbone Up</em>, <em>Nike FuelBand</em>, and <em>Fitbit</em> it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the <a href="http://groupware.les.inf.puc-rio.br/har">PUC-RIO Human Activity Report</a> website (see the section on the Weight Lifting Exercise Dataset).</p>
+<p>Using devices such as <em>Jawbone Up</em>, <em>Nike FuelBand</em>, and <em>Fitbit</em> it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks.</p>
+<p>One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.</p>
+<p>More information is available from the <a href="http://groupware.les.inf.puc-rio.br/har">PUC-RIO Human Activity Report</a> website (see the section on the Weight Lifting Exercise Dataset).</p>
 </div>
 <div id="data" class="section level3">
 <h3>Data</h3>
@@ -89,23 +90,32 @@ if (window.hljs && document.readyState && document.readyState === "complete") {
 <li><code>data.table</code> version1.9.5</li>
 <li><code>doParallel</code> version 1.0.8</li>
 <li><code>ggplot2</code> version 1.0.0</li>
-<li><code>kernlab</code> version 0.9-19</li>
 <li><code>lattice</code> version 0.20-29</li>
 <li><code>nnet</code> version 7.3-8</li>
 <li><code>randomForest</code> version 4.6-10</li>
 <li><code>rpart</code> version 4.1-8</li>
-<li><code>rpart-plot</code> version 1.5.1</li>
 </ul></li>
+</ul>
+<pre class="r"><code>library(caret)</code></pre>
+<pre><code>## Loading required package: lattice
+## Loading required package: ggplot2</code></pre>
+<pre class="r"><code>library(data.table)
+library(doParallel)</code></pre>
+<pre><code>## Loading required package: foreach
+## Loading required package: iterators
+## Loading required package: parallel</code></pre>
+<ul>
 <li>The analysis was performed in a Linux Kubuntu 14.04 environment, using RStudio 0.98.</li>
 </ul>
 </div>
 <div id="loading-preparing-and-looking-at-the-data" class="section level2">
 <h2>Loading, preparing and looking at the data</h2>
-<p>The following commands will load the data files and get rid of irrelevant columns: * Timestamp, user and timestamps are irrelevant for prediction * Variables with near zero variance are irrelevant * Variables with a high rate of NA’s will be eliminated. Analysing the data, a cutoff of any NA is the same as over 90% rows NA for any column</p>
-<pre class="r"><code>library(data.table)
-library(caret)</code></pre>
-<pre><code>## Loading required package: lattice
-## Loading required package: ggplot2</code></pre>
+<p>The following commands will load the data files and get rid of irrelevant columns:</p>
+<ul>
+<li>Timestamp, user and timestamps are irrelevant for prediction</li>
+<li>Variables with near zero variance are irrelevant</li>
+<li>Variables with a high rate of NA’s will be eliminated. Analysing the data, a cutoff of any NA is the same as over 90% rows NA for any column.</li>
+</ul>
 <pre class="r"><code>trainSrc = fread(&quot;data/pml-training.csv&quot;,na.strings=c(&quot;NA&quot;,&quot;#DIV/0!&quot;,&quot;&quot;))
 trainDS = copy(trainSrc)
 trainDS[, `:=`(V1=NULL, user_name=NULL, raw_timestamp_part_1=NULL,
@@ -127,12 +137,9 @@ testDS &lt;- testDS[, relevantCols[1:52], with=FALSE]
 #unique(lapply(lapply(colnames(trainSrc), function(x) trainSrc[,.N, by=x]),
 #              function(x) { if (dim(x)[1]&lt;300) x }))</code></pre>
 <p>It’s interesting to check the correlation of the remaining variables. The following analysis identifies highly correlated variables:</p>
-<pre class="r"><code>#library(corrplot)
-M = cor(trainDS[,-53,with=FALSE])
-#corrplot.mixed(M, lower=&quot;ellipse&quot;, upper=&quot;number&quot;, #title=&quot;Correlation Matrix&quot;,
-#         order=&quot;FPC&quot;, tl.pos=&quot;lt&quot;, diag=&quot;l&quot;)
+<pre class="r"><code>M = cor(trainDS[,-53,with=FALSE])
 corElim = findCorrelation(M, cutoff=0.9)</code></pre>
-<p>After all these operations, we are left with the following relevant variables:</p>
+<p>After these operations, we are left with the following relevant variables:</p>
 <table>
 <thead>
 <tr class="header">
@@ -227,16 +234,16 @@ corElim = findCorrelation(M, cutoff=0.9)</code></pre>
 </div>
 <div id="training-and-cross-validating-the-model" class="section level2">
 <h2>Training and Cross-Validating the Model</h2>
-<p>We’ll use a 10-fold cross-validation to train several different models: * A Neural net; * A Random forest; * A CART tree.</p>
+<p>We’ll use a 10-fold cross-validation to train several different models:</p>
+<ul>
+<li>A Neural net;</li>
+<li>A Random forest;</li>
+<li>A CART tree.</li>
+</ul>
 <p>Given the time it takes to train these models, the code will try to recover them from files, and run training only if it can’t find the files.</p>
 <pre class="r"><code>trainCtrl = trainControl(method=&quot;cv&quot;, number=5, 
                          preProcOptions=c(&quot;center&quot;, &quot;scale&quot;))
-
-library(doParallel)</code></pre>
-<pre><code>## Loading required package: foreach
-## Loading required package: iterators
-## Loading required package: parallel</code></pre>
-<pre class="r"><code>cl &lt;- makeCluster(detectCores()-1)
+cl &lt;- makeCluster(detectCores()-1)
 registerDoParallel(cl)
 
 tree = try(suppressWarnings(readRDS(&quot;models/tree.rds&quot;)))
@@ -257,6 +264,7 @@ if (class(neural)[1] == &quot;try-error&quot;) {
     neural = train(classe ~ ., data=trainDS, method = &quot;nnet&quot;,
                    trControl = trainCtrl)
 }
+
 stopCluster(cl)</code></pre>
 </div>
 <div id="model-analysis" class="section level2">
